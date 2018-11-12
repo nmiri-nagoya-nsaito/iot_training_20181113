@@ -9,16 +9,22 @@ import tornado.web
 import socket
 from threading import Thread
 
-WIDTH = 480
-HEIGHT = 360
+WIDTH = 360
+HEIGHT = 270
 FPS = 30
+
+# HTTP接続時に処理するハンドラ
 class HttpHandler(tornado.web.RequestHandler):
     def initialize(self):
         pass
 
+    # GETメソッドの処理
+    # HTTPアクセスを受け付けたらindex.htmlを返す
+    # index.html にはWebSocket接続を確立させるスクリプトが入っている
     def get(self):
-        self.render("./index.html")  #最初のHTTPアクセスを受け付け、WebSocket接続を確立させるスクリプトが入ったindex.htmlを返す
-
+        self.render("./index.html")  
+        
+# WebSocket接続時に処理するハンドラ
 class WSHandler(tornado.websocket.WebSocketHandler):
     def initialize(self, camera):
         self.camera = camera
@@ -26,7 +32,9 @@ class WSHandler(tornado.websocket.WebSocketHandler):
 
     def open(self):
         print(self.request.remote_ip, ": connection opened")
-        t = Thread(target=self.loop)    #撮影&送信スレッドの作成
+        t = Thread(target=self.loop)
+
+        # デーモンに設定する
         t.setDaemon(True)
         t.start()
 
@@ -51,6 +59,7 @@ def get_camera():
     camera.resolution = (WIDTH, HEIGHT)
     camera.framerate = FPS
     camera.start_preview()
+    #camera.start_preview(fullscreen=False, window=(100,20,640,480))
     
     time.sleep(2)        #カメラ初期化
     return camera
@@ -58,7 +67,7 @@ def get_camera():
 # メイン処理
 def main():
     camera = get_camera()
-    print("complete initialization")
+    print("camera initialized.")
     
     # Webアプリの起動
     app = tornado.web.Application([
