@@ -7,7 +7,7 @@ var img = document.getElementById("liveImg");
 var arrayBuffer;
 
 //WebSocketでサーバに接続
-var ws = new WebSocket("ws://localhost:8080/camera"); ws.binaryType = 'arraybuffer';   //受診するデータがバイナリであるので設定
+var ws = new WebSocket("ws://{{host_addr}}:8080/camera"); ws.binaryType = 'arraybuffer';   //受診するデータがバイナリであるので設定
 
 ws.onopen = function(e){
     console.log("connection was established");

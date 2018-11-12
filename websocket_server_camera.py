@@ -1,100 +1,99 @@
 # -*- coding: utf-8 -*-
-import json
 import time
-
-import random
-
-import tornado.websocket
-import tornado.web
-import tornado.ioloop
-
 import picamera
+import io
+import tornado
+import tornado.httpserver
+import tornado.websocket
+import tornado.ioloop
+import tornado.web
+import socket
+from threading import Thread
+import os
 
+WIDTH = 360
+HEIGHT = 270
+FPS = 30
+
+# HTTP接続時に処理するハンドラ
 class HttpHandler(tornado.web.RequestHandler):
     def initialize(self):
         pass
 
     # GETメソッドの処理
-    # HTTPアクセスを受け付けたらindex.htmlを返す
+    # HTTPアクセスを受け付けたらcamera.htmlを返す
     # index.html にはWebSocket接続を確立させるスクリプトが入っている
     def get(self):
-        self.render("./client.html")  
+        self.render("camera.html",
+                   host_addr = self.get_ip(),
+                   )
 
-class CamWebSocket(tornado.websocket.WebSocketHandler):
+    # 自ホストのIPアドレスを取得
+    def get_ip(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8",80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+
+# WebSocket接続時に処理するハンドラ
+class WSHandler(tornado.websocket.WebSocketHandler):
     def initialize(self, camera):
         self.camera = camera
         self.state = True
 
     def open(self):
-        print ('Cam: Session Opened. IP:' + self.request.remote_ip)
-        self.ioloop = tornado.ioloop.IOLoop.instance()
+        print(self.request.remote_ip, ": connection opened")
+        t = Thread(target=self.loop)
 
-        t = Thread(target=self.send_websocket)
+        # デーモンに設定する
         t.setDaemon(True)
         t.start()
 
-    def on_close(self):
-        print("Cam: Session closed")
-        self.state = False     #映像送信のループを終了させる
-        self.close()     #WebSocketセッションを閉じる
+    def loop(self):
+        stream = io.BytesIO()
 
-    def check_origin(self, origin):
-        return True
-
-    def send_websocket(self):
         for foo in self.camera.capture_continuous(stream, "jpeg"):
             stream.seek(0)
             self.write_message(stream.read(), binary=True)
             stream.seek(0)
             stream.truncate()
             if not self.state:
-                break 
-
-#        self.ioloop.add_timeout(time.time() + 0.1, self.send_websocket)
-#            message = json.dumps({
-#            'data1': random.randint(0, 100),
-#            'data2': random.randint(0, 100),
-#            })
-#        self.write_message(message)
-
-
-class SendWebSocket(tornado.websocket.WebSocketHandler):
-    def open(self):
-        print ('Session Opened. IP:' + self.request.remote_ip)
-        self.ioloop = tornado.ioloop.IOLoop.instance()
-        self.send_websocket()
+                break
 
     def on_close(self):
-        print("Session closed")
+        self.state = False     #映像送信のループを終了させる
+        self.close()     #WebSocketセッションを閉じる
+        print(self.request.remote_ip, ": connection closed")
 
-    def check_origin(self, origin):
-        return True
+def get_camera():
+    camera = picamera.PiCamera()
+    camera.resolution = (WIDTH, HEIGHT)
+    camera.framerate = FPS
+    #camera.start_preview()
+    camera.start_preview(fullscreen=False, window=(100,20,320,240))
+    
+    time.sleep(2)        #カメラ初期化
+    return camera
 
-    def send_websocket(self):
-        self.ioloop.add_timeout(time.time() + 0.1, self.send_websocket)
-        if self.ws_connection:
-            message = json.dumps({
-                'data1': random.randint(0, 100),
-                'data2': random.randint(0, 100),
-                })
-            self.write_message(message)
+# メイン処理
+def main():
+    camera = get_camera()
+    print("camera initialized.")
+    
+    # Webアプリの起動
+    app = tornado.web.Application([
+        (r"/", HttpHandler),                           # HTTP接続
+        (r"/camera", WSHandler, dict(camera=camera)),  # WebSocket接続
+    ],
+    template_path=os.path.join(os.getcwd(), "template"),
+    static_path=os.path.join(os.getcwd(), "static"),
+    )
+    http_server = tornado.httpserver.HTTPServer(app)
+    http_server.listen(8080)
+    tornado.ioloop.IOLoop.instance().start()
 
-# 処理開始
-camera = picamera.PiCamera()
-camera.resolution = (WIDTH, HEIGHT)
-camera.framerate = FPS
-camera.start_preview()
-
-time.sleep(2)        #カメラ初期化
-
-
-
-app = tornado.web.Application([
-    (r"/", HttpHandler),
-    (r"/ws/display", SendWebSocket),
-    (r"/camera", CamWebSocket, dict(camera=camera)),
-])
+# 定義は以上．ここからプログラム開始
 
 if __name__ == "__main__":
-    app.listen(8080)
-    tornado.ioloop.IOLoop.current().start()
+    main()
