@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{{title}}</title>
+    <link rel="stylesheet" href="{{ static_url("style.css") }}"/>
+</head>
+<body>
+    <h1> {{title}} </h1>
+
+    {% for item in items %}
+    <h2>{{item}}</h2>
+    <div id="{{item}}"></div>
+    {% end %}
+
+    <script>
+        // アドレスがうまく渡らない場合はそれぞれのIPで置き換える
+        var connection = new WebSocket('ws://{{host_addr}}:8080/ws/display');
+        connection.onmessage = function (e) {
+            {% for item in items %}
+            document.getElementById('{{item}}').textContent = JSON.parse(e.data)['{{item}}'];
+            {% end %}
+        };
+    </script>
+</body>
+</html>
